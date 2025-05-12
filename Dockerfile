@@ -2,8 +2,8 @@
 FROM golang:1.23.2-alpine AS builder
 LABEL authors="ilyaparunov"
 
-# Устанавливаем зависимости для сборки
-RUN apk add --no-cache gcc musl-dev sqlite-dev git
+# Устанавливаем зависимости для сборки с PostgreSQL
+RUN apk add --no-cache gcc musl-dev postgresql-dev git
 
 WORKDIR /app
 
@@ -28,10 +28,7 @@ FROM alpine:3.18
 WORKDIR /app
 
 # Устанавливаем только необходимые зависимости
-RUN apk add --no-cache sqlite
-
-# Создаем директорию для базы данных
-RUN mkdir -p /app/storage && chmod 777 /app/storage
+RUN apk add --no-cache postgresql-client
 
 # Копируем бинарники из builder-этапа
 COPY --from=builder /app/auth-service /app/auth-service
@@ -52,4 +49,4 @@ USER appuser
 EXPOSE 44044
 
 # Команда запуска
-CMD ["sh", "-c", "/app/migrator --storage-path=/app/storage/sso.db --migrations-path=/app/migrations && /app/auth-service --config=./config/local.yaml"]
+CMD ["sh", "-c", "/app/migrator && /app/auth-service --config=./config/local.yaml"]
