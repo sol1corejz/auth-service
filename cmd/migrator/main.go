@@ -2,37 +2,30 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/sqlite3"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/sol1corejz/auth-service/internal/storage/postgres"
+	"log"
 )
 
 func main() {
-	var storagePath, migrationsPath, migrationsTable string
 
-	flag.StringVar(&storagePath, "storage-path", "", "Path to the database storage path")
-	flag.StringVar(&migrationsPath, "migrations-path", "", "Path tomigrations")
-	flag.StringVar(&migrationsTable, "migrations-table", "", "Name of migrations table")
-	flag.Parse()
+	dbURL := postgres.GetDatabaseURL()
+	fmt.Println(dbURL)
 
-	if storagePath == "" {
-		panic("storage-path is required")
-	}
-
-	if migrationsPath == "" {
-		panic("migrations-path is required")
-	}
-
+	// Создаем экземпляр мигратора
 	m, err := migrate.New(
-		"file://"+migrationsPath,
-		fmt.Sprintf("sqlite3://%s?x-migrations-table=%s", storagePath, migrationsTable),
+		"file://migrations",
+		dbURL,
 	)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to create migrate instance: %v", err)
 	}
+	defer m.Close()
 
+	// Применяем миграции
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
 			fmt.Println("Nothing to migrate")

@@ -1,25 +1,26 @@
-package sqlite
+package postgres
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/mattn/go-sqlite3"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
 	"github.com/sol1corejz/auth-service/internal/domain/models"
 	"github.com/sol1corejz/auth-service/internal/storage"
+	"os"
 )
 
 type Storage struct {
 	db *sql.DB
 }
 
-// New creates a new instance of the SQLite storage
-func New(storagePath string) (*Storage, error) {
-	const op = "storage.sqlite.New"
+func New() (*Storage, error) {
+	const op = "storage.postgres.New"
 
-	db, err := sql.Open("sqlite3", storagePath)
+	db, err := sql.Open("pgx", GetDatabaseURL())
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -27,27 +28,27 @@ func New(storagePath string) (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
-// SaveUser saves user to db.
+// SaveUser saves user to db and returns new user ID
 func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (int64, error) {
-	const op = "storage.sqlite.SaveUser"
+	const op = "storage.postgres.SaveUser"
 
-	stmt, err := s.db.Prepare(`INSERT INTO users (email, pass_hash) VALUES (?, ?)`)
+	// Добавляем RETURNING id в запрос
+	stmt, err := s.db.Prepare(`INSERT INTO users (email, pass_hash) VALUES ($1, $2) RETURNING id`)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
+	defer stmt.Close() // Важно закрывать statement
 
-	res, err := stmt.ExecContext(ctx, email, passHash)
+	var id int64
+	// Используем QueryRowContext с RETURNING
+	err = stmt.QueryRowContext(ctx, email, passHash).Scan(&id)
 	if err != nil {
-		var sqliteErr sqlite3.Error
-		if errors.As(err, &sqliteErr) && errors.Is(sqliteErr.ExtendedCode, sqlite3.ErrConstraintUnique) {
-			return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == "23505" {
+				return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
+			}
 		}
-
-		return 0, fmt.Errorf("%s: %w", op, err)
-	}
-
-	id, err := res.LastInsertId()
-	if err != nil {
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -56,9 +57,9 @@ func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (
 
 // User returns user by email.
 func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
-	const op = "storage.sqlite.User"
+	const op = "storage.postgres.User"
 
-	stmt, err := s.db.Prepare("SELECT id, email, pass_hash FROM users WHERE email = ?")
+	stmt, err := s.db.Prepare("SELECT id, email, pass_hash FROM users WHERE email = $1")
 	if err != nil {
 		return models.User{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -80,9 +81,9 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 
 // IsAdmin return is user admin
 func (s *Storage) IsAdmin(ctx context.Context, userID int64) (bool, error) {
-	const op = "storage.sqlite.IsAdmin"
+	const op = "storage.postgres.IsAdmin"
 
-	stmt, err := s.db.Prepare("SELECT is_admin FROM users WHERE id = ?")
+	stmt, err := s.db.Prepare("SELECT is_admin FROM users WHERE id = $1")
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
@@ -103,9 +104,9 @@ func (s *Storage) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 
 // App returns app by id.
 func (s *Storage) App(ctx context.Context, id int) (models.App, error) {
-	const op = "storage.sqlite.App"
+	const op = "storage.postgres.App"
 
-	stmt, err := s.db.Prepare("SELECT id, name FROM apps WHERE id = ?")
+	stmt, err := s.db.Prepare("SELECT id, name FROM apps WHERE id = $1")
 	if err != nil {
 		return models.App{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -123,4 +124,22 @@ func (s *Storage) App(ctx context.Context, id int) (models.App, error) {
 	}
 
 	return app, nil
+}
+
+func GetDatabaseURL() string {
+	// Попробуем прочитать из переменных окружения (для Docker)
+	dbURL := os.Getenv("DB_URL")
+	if dbURL != "" {
+		return dbURL
+	}
+
+	// Если не найдено в переменных окружения, пробуем .env (для локальной разработки)
+	if err := godotenv.Load(); err == nil {
+		dbURL = os.Getenv("DB_URL")
+		if dbURL != "" {
+			return dbURL
+		}
+	}
+
+	panic("DB_URL not found in environment or .env file")
 }

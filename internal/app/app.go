@@ -3,7 +3,7 @@ package app
 import (
 	grpcapp "github.com/sol1corejz/auth-service/internal/app/grpc"
 	"github.com/sol1corejz/auth-service/internal/services/auth"
-	"github.com/sol1corejz/auth-service/internal/storage/sqlite"
+	"github.com/sol1corejz/auth-service/internal/storage/postgres"
 	"log/slog"
 	"time"
 )
@@ -15,11 +15,10 @@ type App struct {
 func New(
 	log *slog.Logger,
 	grpcPort int,
-	storagePath string,
 	tokenTTL time.Duration,
 ) *App {
 
-	storage, err := sqlite.New(storagePath)
+	storage, err := postgres.New()
 	if err != nil {
 		panic(err)
 	}
