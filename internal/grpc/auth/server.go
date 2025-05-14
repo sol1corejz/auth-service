@@ -11,9 +11,10 @@ import (
 )
 
 type Auth interface {
-	Login(ctx context.Context, email string, password string, appID int) (token string, err error)
+	Login(ctx context.Context, email string, password string, appID int) (acessToken string, refreshToken string, err error)
 	RegisterNewUser(ctx context.Context, email string, password string) (userID int64, err error)
 	IsAdmin(ctx context.Context, userID int64) (bool, error)
+	CheckAndRefreshTokens(ctx context.Context, accessToken string, refreshToken string) (bool, string, error)
 }
 
 type ServerAPI struct {
@@ -35,7 +36,7 @@ func (s *ServerAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.
 		return nil, err
 	}
 
-	token, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.GetAppId()))
+	accessToken, refreshToken, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.GetAppId()))
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			return nil, status.Error(codes.InvalidArgument, "invalid credentials")
@@ -45,7 +46,8 @@ func (s *ServerAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.
 	}
 
 	return &ssov1.LoginResponse{
-		Token: token,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
 	}, nil
 }
 
@@ -73,7 +75,7 @@ func (s *ServerAPI) IsAdmin(ctx context.Context, req *ssov1.IsAdminRequest) (*ss
 		return nil, err
 	}
 
-	isADmin, err := s.auth.IsAdmin(ctx, req.GetUserId())
+	isAdmin, err := s.auth.IsAdmin(ctx, req.GetUserId())
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
 			return nil, status.Error(codes.NotFound, "user not found")
@@ -82,8 +84,30 @@ func (s *ServerAPI) IsAdmin(ctx context.Context, req *ssov1.IsAdminRequest) (*ss
 	}
 
 	return &ssov1.IsAdminResponse{
-		IsAdmin: isADmin,
+		IsAdmin: isAdmin,
 	}, nil
+}
+
+func (s *ServerAPI) CheckAndRefreshTokens(ctx context.Context, req *ssov1.TokenCheckRequest) (*ssov1.TokenCheckResponse, error) {
+	if err := validateTokens(req); err != nil {
+		return &ssov1.TokenCheckResponse{
+			IsValid:        false,
+			NewAccessToken: "",
+		}, err
+	}
+
+	isValid, newAccessToken, err := s.auth.CheckAndRefreshTokens(ctx, req.GetAccessToken(), req.GetRefreshToken())
+	if err != nil {
+		return &ssov1.TokenCheckResponse{
+			IsValid:        false,
+			NewAccessToken: "",
+		}, err
+	}
+
+	return &ssov1.TokenCheckResponse{
+		IsValid:        isValid,
+		NewAccessToken: newAccessToken,
+	}, err
 }
 
 func validateLogin(req *ssov1.LoginRequest) error {
@@ -120,4 +144,17 @@ func validateIsAdmin(req *ssov1.IsAdminRequest) error {
 	}
 
 	return nil
+}
+
+func validateTokens(req *ssov1.TokenCheckRequest) error {
+	if req.GetAccessToken() == "" {
+		return status.Error(codes.InvalidArgument, "access_token required")
+	}
+
+	if req.GetRefreshToken() == "" {
+		return status.Error(codes.InvalidArgument, "refresh_token required")
+	}
+
+	return nil
+
 }

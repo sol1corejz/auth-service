@@ -49,4 +49,4 @@ USER appuser
 EXPOSE 44044
 
 # Команда запуска
-CMD ["sh", "-c", "/app/migrator && /app/auth-service --config=./config/local.yaml"]
+CMD ["sh", "-c", "/app/migrator && /app/auth-service --config=./config/prod.yaml"]
