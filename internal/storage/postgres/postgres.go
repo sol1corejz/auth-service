@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
@@ -29,37 +30,37 @@ func New() (*Storage, error) {
 }
 
 // SaveUser saves user to db and returns new user ID
-func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (int64, error) {
+func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (string, error) {
 	const op = "storage.postgres.SaveUser"
 
 	// Добавляем RETURNING id в запрос
-	stmt, err := s.db.Prepare(`INSERT INTO users (email, pass_hash) VALUES ($1, $2) RETURNING id`)
+	stmt, err := s.db.Prepare(`INSERT INTO users (email, pass_hash) VALUES ($1, $2) RETURNING user_id`)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return "", fmt.Errorf("%s: %w", op, err)
 	}
 	defer stmt.Close() // Важно закрывать statement
 
-	var id int64
+	var id uuid.UUID
 	// Используем QueryRowContext с RETURNING
 	err = stmt.QueryRowContext(ctx, email, passHash).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == "23505" {
-				return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
+				return "", fmt.Errorf("%s: %w", op, storage.ErrUserExists)
 			}
 		}
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	return id, nil
+	return id.String(), nil
 }
 
 // User returns user by email.
 func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 	const op = "storage.postgres.User"
 
-	stmt, err := s.db.Prepare("SELECT id, email, pass_hash FROM users WHERE email = $1")
+	stmt, err := s.db.Prepare("SELECT user_id, email, pass_hash FROM users WHERE email = $1")
 	if err != nil {
 		return models.User{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -80,10 +81,10 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 }
 
 // IsAdmin return is user admin
-func (s *Storage) IsAdmin(ctx context.Context, userID int64) (bool, error) {
+func (s *Storage) IsAdmin(ctx context.Context, userID string) (bool, error) {
 	const op = "storage.postgres.IsAdmin"
 
-	stmt, err := s.db.Prepare("SELECT is_admin FROM users WHERE id = $1")
+	stmt, err := s.db.Prepare("SELECT is_admin FROM users WHERE user_id = $1")
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
@@ -103,15 +104,15 @@ func (s *Storage) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 }
 
 // App returns app by id.
-func (s *Storage) App(ctx context.Context, id int) (models.App, error) {
+func (s *Storage) App(ctx context.Context, name string) (models.App, error) {
 	const op = "storage.postgres.App"
 
-	stmt, err := s.db.Prepare("SELECT id, name FROM apps WHERE id = $1")
+	stmt, err := s.db.Prepare("SELECT app_id, name FROM apps WHERE name = $1")
 	if err != nil {
 		return models.App{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	row := stmt.QueryRowContext(ctx, id)
+	row := stmt.QueryRowContext(ctx, name)
 
 	var app models.App
 	err = row.Scan(&app.ID, &app.Name)

@@ -6,10 +6,11 @@ require (
 	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/golang-migrate/migrate/v4 v4.18.3
+	github.com/google/uuid v1.6.0
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/jackc/pgx/v5 v5.5.4
 	github.com/joho/godotenv v1.5.1
-	github.com/sol1corejz/sso-protos v0.0.6
+	github.com/sol1corejz/sso-protos v0.1.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.38.0
 	google.golang.org/grpc v1.72.0

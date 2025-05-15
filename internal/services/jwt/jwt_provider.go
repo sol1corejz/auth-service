@@ -2,7 +2,9 @@ package jwt
 
 import (
 	"context"
+	"fmt"
 	"github.com/sol1corejz/auth-service/internal/domain/models"
+	"github.com/sol1corejz/auth-service/internal/lib/jwt"
 	"time"
 )
 
@@ -23,16 +25,22 @@ func (t *TokenProvider) CheckToken(
 	accessToken string,
 	refreshToken string,
 ) (models.TokenPair, error) {
+	valid, tokens, err := jwt.CheckTokens(
+		accessToken,
+		refreshToken,
+		t.AccessTTL,
+		t.RefreshTTL,
+	)
 
-	/*
-		TODO: реализовать проверку токенов в либе jwt.go и использовать здесь
-			1. рефреш валиден и аксес валиден: возвращаем true
-			2. рефреш валиден и аксес НЕ валиден: вовзращаем true и новую пару токенов
-			3. рефреш НЕ валиден и аксес НЕ валиден: возвращаем false и ошибку (нет доступа)
-	*/
+	if !valid {
+		return models.TokenPair{}, fmt.Errorf("access denied: %v", err)
+	}
 
-	return models.TokenPair{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-	}, nil
+	// Если токены были обновлены, возвращаем новые
+	if tokens != nil {
+		return *tokens, nil
+	}
+
+	// Если оба токена были валидны, возвращаем оригинальные
+	return models.TokenPair{}, nil
 }

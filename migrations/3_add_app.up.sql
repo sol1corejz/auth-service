@@ -1,3 +1,3 @@
-INSERT INTO apps (id, name)
-VALUES (1, 'coin-keeper')
+INSERT INTO apps (app_id, name)
+VALUES (gen_random_uuid(), 'coin-keeper')
     ON CONFLICT DO NOTHING;

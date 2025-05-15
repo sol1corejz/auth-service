@@ -13,7 +13,6 @@ import (
 func main() {
 
 	dbURL := postgres.GetDatabaseURL()
-	fmt.Println(dbURL)
 
 	// Создаем экземпляр мигратора
 	m, err := migrate.New(

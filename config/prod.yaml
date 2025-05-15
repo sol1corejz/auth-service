@@ -1,7 +1,7 @@
 env: "prod" #de, prod
 storage_path: "./storage/sso.db"
-token_ttl: 1h
+token_ttl: 5m
 refresh_token_ttl: 720h
 grpc:
   port: 44044
-  timeout: 10h
+  timeout: 48h

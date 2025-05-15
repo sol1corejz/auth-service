@@ -11,10 +11,10 @@ import (
 )
 
 type Auth interface {
-	Login(ctx context.Context, email string, password string, appID int) (acessToken string, refreshToken string, err error)
-	RegisterNewUser(ctx context.Context, email string, password string) (userID int64, err error)
-	IsAdmin(ctx context.Context, userID int64) (bool, error)
-	CheckAndRefreshTokens(ctx context.Context, accessToken string, refreshToken string) (bool, string, error)
+	Login(ctx context.Context, email string, password string, appID string) (acessToken string, refreshToken string, err error)
+	RegisterNewUser(ctx context.Context, email string, password string) (userID string, err error)
+	IsAdmin(ctx context.Context, userID string) (bool, error)
+	CheckAndRefreshTokens(ctx context.Context, accessToken string, refreshToken string) (bool, string, string, error)
 }
 
 type ServerAPI struct {
@@ -26,17 +26,13 @@ func Register(gRPC *grpc.Server, auth Auth) {
 	ssov1.RegisterAuthServer(gRPC, &ServerAPI{auth: auth})
 }
 
-const (
-	emptyVlaue = 0
-)
-
 func (s *ServerAPI) Login(ctx context.Context, req *ssov1.LoginRequest) (*ssov1.LoginResponse, error) {
 
 	if err := validateLogin(req); err != nil {
 		return nil, err
 	}
 
-	accessToken, refreshToken, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.GetAppId()))
+	accessToken, refreshToken, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), req.GetAppName())
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			return nil, status.Error(codes.InvalidArgument, "invalid credentials")
@@ -96,17 +92,19 @@ func (s *ServerAPI) CheckAndRefreshTokens(ctx context.Context, req *ssov1.TokenC
 		}, err
 	}
 
-	isValid, newAccessToken, err := s.auth.CheckAndRefreshTokens(ctx, req.GetAccessToken(), req.GetRefreshToken())
+	isValid, newAccessToken, newRefreshToken, err := s.auth.CheckAndRefreshTokens(ctx, req.GetAccessToken(), req.GetRefreshToken())
 	if err != nil {
 		return &ssov1.TokenCheckResponse{
-			IsValid:        false,
-			NewAccessToken: "",
+			IsValid:         false,
+			NewAccessToken:  "",
+			NewRefreshToken: "",
 		}, err
 	}
 
 	return &ssov1.TokenCheckResponse{
-		IsValid:        isValid,
-		NewAccessToken: newAccessToken,
+		IsValid:         isValid,
+		NewAccessToken:  newAccessToken,
+		NewRefreshToken: newRefreshToken,
 	}, err
 }
 
@@ -119,8 +117,8 @@ func validateLogin(req *ssov1.LoginRequest) error {
 		return status.Error(codes.InvalidArgument, "password required")
 	}
 
-	if req.GetAppId() == emptyVlaue {
-		return status.Error(codes.InvalidArgument, "app id required")
+	if req.GetAppName() == "" {
+		return status.Error(codes.InvalidArgument, "app name required")
 	}
 
 	return nil
@@ -139,7 +137,7 @@ func validateRegister(req *ssov1.RegisterRequest) error {
 }
 
 func validateIsAdmin(req *ssov1.IsAdminRequest) error {
-	if req.GetUserId() == emptyVlaue {
+	if req.GetUserId() == "" {
 		return status.Error(codes.InvalidArgument, "user_id required")
 	}
 

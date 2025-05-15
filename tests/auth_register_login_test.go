@@ -39,12 +39,15 @@ func TestRegisterLogin_Login_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	token := respLogin.GetToken()
-	require.NotEmpty(t, token)
+	accessToken := respLogin.GetAccessToken()
+	require.NotEmpty(t, accessToken)
+
+	refreshToken := respLogin.GetRefreshToken()
+	require.NotEmpty(t, refreshToken)
 
 	loginTime := time.Now()
 
-	tokenParsed, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+	tokenParsed, err := jwt.Parse(accessToken, func(token *jwt.Token) (interface{}, error) {
 		return []byte(appSecret), nil
 	})
 	require.NoError(t, err)
