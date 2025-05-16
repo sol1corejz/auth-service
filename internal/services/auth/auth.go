@@ -191,7 +191,7 @@ func (a *Auth) CheckAndRefreshTokens(ctx context.Context, accessToken string, re
 
 	tokenPair, err := a.tokenProvider.CheckToken(ctx, accessToken, refreshToken)
 	if err != nil {
-		return false, "", "", ErrInvalidCredentials
+		return false, "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	if tokenPair.AccessToken == accessToken {

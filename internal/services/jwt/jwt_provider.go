@@ -2,7 +2,6 @@ package jwt
 
 import (
 	"context"
-	"fmt"
 	"github.com/sol1corejz/auth-service/internal/domain/models"
 	"github.com/sol1corejz/auth-service/internal/lib/jwt"
 	"time"
@@ -32,8 +31,8 @@ func (t *TokenProvider) CheckToken(
 		t.RefreshTTL,
 	)
 
-	if !valid {
-		return models.TokenPair{}, fmt.Errorf("access denied: %v", err)
+	if !valid || err != nil {
+		return models.TokenPair{}, jwt.ErrAccessDenied
 	}
 
 	// Если токены были обновлены, возвращаем новые

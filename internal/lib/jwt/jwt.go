@@ -1,6 +1,7 @@
 package jwt
 
 import (
+	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -15,6 +16,8 @@ const (
 	jwtAccess  = "JWT_ACCESS_SECRET"
 	jwtRefresh = "JWT_REFRESH_SECRET"
 )
+
+var ErrAccessDenied = errors.New("access denied")
 
 func NewTokenPair(user models.User, app models.App, accessDuration time.Duration, refreshDuration time.Duration) (string, string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -58,6 +61,10 @@ func CheckTokens(
 ) (bool, *models.TokenPair, error) {
 	// 1. Проверяем access token
 	accessValid := validateAccessToken(accessToken)
+	isAccessTokenExpired := validateAccessTokenExpiration(refreshToken)
+	if !accessValid {
+		return false, nil, ErrAccessDenied
+	}
 
 	// 2. Проверяем refresh token
 	refreshTokenObj, refreshErr := validateRefreshToken(refreshToken)
@@ -90,7 +97,7 @@ func CheckTokens(
 	}
 
 	// Случай 1: Оба токена валидны
-	if accessValid && refreshValid {
+	if !isAccessTokenExpired && refreshValid {
 		return true, &models.TokenPair{
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
@@ -98,7 +105,6 @@ func CheckTokens(
 	}
 
 	// Случай 2: Refresh валиден, access нет
-	// TODO: сделать проверку если токен только истек, в остальных случаях кидаем пользака nah отседова?
 	if refreshValid {
 		newAccess, newRefresh, err := NewTokenPair(user, app, accessDuration, refreshDuration)
 		if err != nil {
@@ -111,15 +117,67 @@ func CheckTokens(
 	}
 
 	// Случай 3: Оба токена невалидны
-	return false, nil, fmt.Errorf("both tokens are invalid")
+	return false, nil, ErrAccessDenied
 }
 
 // Валидация access token
 func validateAccessToken(tokenString string) bool {
+	claims, err := parseAccessToken(tokenString)
+	if err != nil {
+		return false
+	}
+
+	// Проверка отдельных полей
+	if _, ok := claims["uid"].(string); !ok || claims["uid"].(string) == "" {
+		return false
+	}
+
+	if _, ok := claims["app_id"].(string); !ok || claims["app_id"].(string) == "" {
+		return false
+	}
+
+	if _, ok := claims["email"].(string); !ok || claims["email"].(string) == "" {
+		return false
+	}
+
+	return true
+}
+
+func validateAccessTokenExpiration(tokenString string) bool {
+
+	claims, err := parseAccessToken(tokenString)
+	if err != nil {
+		return false
+	}
+
+	if exp, ok := claims["exp"].(float64); !ok || time.Now().Unix() > int64(exp) {
+		return false
+	}
+
+	return true
+}
+
+func parseAccessToken(tokenString string) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrAccessDenied
+		}
 		return []byte(GetSecretKey(jwtAccess)), nil
 	})
-	return err == nil && token.Valid
+
+	if err != nil {
+		return nil, err
+	}
+	if !token.Valid {
+		return nil, err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, err
+	}
+
+	return claims, nil
 }
 
 func validateRefreshToken(tokenString string) (*jwt.Token, error) {
